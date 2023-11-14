@@ -385,6 +385,10 @@ class myPacket():
         self.collided = 0
         self.processed = 0
 
+
+def generateSchedule(nodes):
+    schedule =[ [0]*5 for i in range(len(nodes))]
+    return schedule
 #
 # main discrete event loop, runs for each node
 # a global list of packet being processed at the gateway
@@ -509,8 +513,17 @@ for i in range(0,nrNodes):
     node = myNode(i,bsId, avgSendTime,20)
     nodes.append(node)
 
-schedule = generateSchedule(nrNodes)
+RL_SF=0
+RL_CR=1
+RL_BW=2
+RL_CF=3
+RL_TP=4
+
+schedule = generateSchedule(nodes)
 for i in range(0, nrNodes):
+    node =nodes[i]
+    if experiment ==6:
+        node.packet = myPacket(i, 20, node.dist,schedule[i][RL_SF],schedule[i][RL_CR],schedule[i][RL_BW],schedule[i][RL_CF],schedule[i][RL_TP])
     env.process(transmit(env,node))
 
 #prepare show
