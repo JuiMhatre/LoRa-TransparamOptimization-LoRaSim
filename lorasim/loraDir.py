@@ -78,7 +78,7 @@ sf9 = np.array([9,-131.25,-128.25,-127.5])
 sf10 = np.array([10,-132.75,-130.25,-128.75])
 sf11 = np.array([11,-134.5,-132.75,-128.75])
 sf12 = np.array([12,-133.25,-132.25,-132.25])
-
+nrNodes=100
 #
 # check for collisions at base station
 # Note: called before a packet (or rather node) is inserted into the list
@@ -221,7 +221,7 @@ def airtime(sf,cr,pl,bw):
 # this function creates a node
 #
 class myNode():
-    def __init__(self, nodeid, bs, period, packetlen):
+    def __init__(self, nodeid, bs, period, packetlen,maxDist,bsx,bsy):
         self.nodeid = nodeid
         self.period = period
         self.bs = bs
@@ -232,7 +232,7 @@ class myNode():
         # and ensure minimum distance between each pair of nodes
         found = 0
         rounds = 0
-        global nodes
+        #global nodes
         while (found == 0 and rounds < 100):
             a = random.random()
             b = random.random()
@@ -443,29 +443,37 @@ def transmit(env,node):
         node.packet.processed = 0
         node.packet.lost = False
 
+def setupNodes():
+    global nodes
+
+    for i in range(0, nrNodes):
+        # myNode takes period (in ms), base station id packetlen (in Bytes)
+        # 1000000 = 16 min
+        node = myNode(i, bsId, avgSendTime, 20,maxDist,bsx,bsy)
+        nodes.append(node)
 #
 # "main" program
 #
-
+def getstate():
+    setupNodes()
+    nodeinfo = [[node.x, node.y,node.packet.pl] for node in nodes]
+    return nodeinfo
 # get arguments
-
-nrNodes = 100
 avgSendTime = 2
 experiment = 5
 simtime = 1000
 full_collision = True
-# global stuff
-#Rnd = random.seed(12345)
+    # global stuff
+    # Rnd = random.seed(12345)
 nodes = []
 packetsAtBS = []
 env = simpy.Environment()
 
-# maximum number of packets the BS can receive at the same time
+    # maximum number of packets the BS can receive at the same time
 maxBSReceives = 8
 
-
-# max distance: 300m in city, 3000 m outside (5 km Utz experiment)
-# also more unit-disc like according to Utz
+    # max distance: 300m in city, 3000 m outside (5 km Utz experiment)
+    # also more unit-disc like according to Utz
 bsId = 1
 nrCollisions = 0
 nrReceived = 0
@@ -475,112 +483,110 @@ nrLost = 0
 Ptx = 14
 gamma = 2.08
 d0 = 40.0
-var = 0           # variance ignored for now
+var = 0  # variance ignored for now
 Lpld0 = 127.41
 GL = 0
 
-sensi = np.array([sf7,sf8,sf9,sf10,sf11,sf12])
-if experiment in [0,1,4]:
-    minsensi = sensi[5,2]  # 5th row is SF12, 2nd column is BW125
+sensi = np.array([sf7, sf8, sf9, sf10, sf11, sf12])
+if experiment in [0, 1, 4]:
+    minsensi = sensi[5, 2]  # 5th row is SF12, 2nd column is BW125
 elif experiment == 2:
-    minsensi = -112.0   # no experiments, so value from datasheet
-elif experiment in [3,5]:
-    minsensi = np.amin(sensi) ## Experiment 3 can use any setting, so take minimum
+    minsensi = -112.0  # no experiments, so value from datasheet
+elif experiment in [3, 5]:
+    minsensi = np.amin(sensi)  ## Experiment 3 can use any setting, so take minimum
 Lpl = Ptx - minsensi
-print ("amin", minsensi, "Lpl", Lpl)
-maxDist = d0*(math.e**((Lpl-Lpld0)/(10.0*gamma)))
-print ("maxDist:", maxDist)
+print("amin", minsensi, "Lpl", Lpl)
+maxDist = d0 * (math.e ** ((Lpl - Lpld0) / (10.0 * gamma)))
+print("maxDist:", maxDist)
 
-# base station placement
-bsx = maxDist+10
-bsy = maxDist+10
+    # base station placement
+bsx = maxDist + 10
+bsy = maxDist + 10
 xmax = bsx + maxDist + 20
 ymax = bsy + maxDist + 20
 
-# prepare graphics and add sink
+    # prepare graphics and add sink
 if (graphics == 1):
-    plt.ion()
-    plt.figure()
-    ax = plt.gcf().gca()
-    # XXX should be base station position
-    ax.add_artist(plt.Circle((bsx, bsy), 3, fill=True, color='green'))
-    ax.add_artist(plt.Circle((bsx, bsy), maxDist, fill=False, color='green'))
+        plt.ion()
+        plt.figure()
+        ax = plt.gcf().gca()
+        # XXX should be base station position
+        ax.add_artist(plt.Circle((bsx, bsy), 3, fill=True, color='green'))
+        ax.add_artist(plt.Circle((bsx, bsy), maxDist, fill=False, color='green'))
 
+def simulate(schedule):
+    setupNodes()
 
-for i in range(0,nrNodes):
-    # myNode takes period (in ms), base station id packetlen (in Bytes)
-    # 1000000 = 16 min
-    node = myNode(i,bsId, avgSendTime,20)
-    nodes.append(node)
+    RL_SF = 0
+    RL_CR = 1
+    RL_BW = 2
+    RL_CF = 3
+    RL_TP = 4
 
-RL_SF=0
-RL_CR=1
-RL_BW=2
-RL_CF=3
-RL_TP=4
+    # schedule = generateSchedule(nodes)
+    for i in range(0, nrNodes):
+        node = nodes[i]
+        if experiment == 6:
+            node.packet = myPacket(i, 20, node.dist, schedule[i][RL_SF], schedule[i][RL_CR], schedule[i][RL_BW],
+                                   schedule[i][RL_CF], schedule[i][RL_TP])
+        env.process(transmit(env, node))
 
-schedule = generateSchedule(nodes)
-for i in range(0, nrNodes):
-    node =nodes[i]
-    if experiment ==6:
-        node.packet = myPacket(i, 20, node.dist,schedule[i][RL_SF],schedule[i][RL_CR],schedule[i][RL_BW],schedule[i][RL_CF],schedule[i][RL_TP])
-    env.process(transmit(env,node))
+    # prepare show
+    # if (graphics == 1):
+    #     plt.xlim([0, xmax])
+    #     plt.ylim([0, ymax])
+    #     plt.draw()
+    #     plt.show()
 
-#prepare show
-if (graphics == 1):
-    plt.xlim([0, xmax])
-    plt.ylim([0, ymax])
-    plt.draw()
-    plt.show()
+    # start simulation
+    env.run(until=simtime)
 
-# start simulation
-env.run(until=simtime)
+    # print stats and save into file
+    print("nrCollisions ", nrCollisions)
 
-# print stats and save into file
-print ("nrCollisions ", nrCollisions)
+    # compute energy
+    # Transmit consumption in mA from -2 to +17 dBm
+    TX = [22, 22, 22, 23,  # RFO/PA0: -2..1
+          24, 24, 24, 25, 25, 25, 25, 26, 31, 32, 34, 35, 44,  # PA_BOOST/PA1: 2..14
+          82, 85, 90,  # PA_BOOST/PA1: 15..17
+          105, 115, 125]  # PA_BOOST/PA1+PA2: 18..20
+    # mA = 90    # current draw for TX = 17 dBm
+    V = 3.0  # voltage XXX
+    sent = sum(n.sent for n in nodes)
+    energy = sum(node.packet.rectime * TX[int(node.packet.txpow) + 2] * V * node.sent for node in nodes) / 1e6
 
-# compute energy
-# Transmit consumption in mA from -2 to +17 dBm
-TX = [22, 22, 22, 23,                                      # RFO/PA0: -2..1
-      24, 24, 24, 25, 25, 25, 25, 26, 31, 32, 34, 35, 44,  # PA_BOOST/PA1: 2..14
-      82, 85, 90,                                          # PA_BOOST/PA1: 15..17
-      105, 115, 125]                                       # PA_BOOST/PA1+PA2: 18..20
-# mA = 90    # current draw for TX = 17 dBm
-V = 3.0     # voltage XXX
-sent = sum(n.sent for n in nodes)
-energy = sum(node.packet.rectime * TX[int(node.packet.txpow)+2] * V * node.sent for node in nodes) / 1e6
+    print("energy (in J): ", energy)
+    print("sent packets: ", sent)
+    print("collisions: ", nrCollisions)
+    print("received packets: ", nrReceived)
+    print("processed packets: ", nrProcessed)
+    print("lost packets: ", nrLost)
 
-print ("energy (in J): ", energy)
-print ("sent packets: ", sent)
-print ("collisions: ", nrCollisions)
-print ("received packets: ", nrReceived)
-print ("processed packets: ", nrProcessed)
-print ("lost packets: ", nrLost)
+    # data extraction rate
+    der = (sent - nrCollisions) / float(sent)
+    print("DER:", der)
+    der = (nrReceived) / float(sent)
+    print("DER method 2:", der)
+    return getstate(), energy, 1
+    # this can be done to keep graphics visible
+    # if (graphics == 1):
+    #     raw_input('Press Enter to continue ...')
 
-# data extraction rate
-der = (sent-nrCollisions)/float(sent)
-print ("DER:", der)
-der = (nrReceived)/float(sent)
-print ("DER method 2:", der)
+    # save experiment data into a dat file that can be read by e.g. gnuplot
+    # name of file would be:  exp0.dat for experiment 0
+    # fname = "exp" + str(experiment) + ".dat"
+    # print(fname)
+    # if os.path.isfile(fname):
+    #     res = "\n" + str(nrNodes) + " " + str(nrCollisions) + " " + str(sent) + " " + str(energy)
+    # else:
+    #     res = "#nrNodes nrCollisions nrTransmissions OverallEnergy\n" + str(nrNodes) + " " + str(
+    #         nrCollisions) + " " + str(sent) + " " + str(energy)
+    # with open(fname, "a") as myfile:
+    #     myfile.write(res)
+    # myfile.close()
 
-# this can be done to keep graphics visible
-# if (graphics == 1):
-#     raw_input('Press Enter to continue ...')
-
-# save experiment data into a dat file that can be read by e.g. gnuplot
-# name of file would be:  exp0.dat for experiment 0
-fname = "exp" + str(experiment) + ".dat"
-print (fname)
-if os.path.isfile(fname):
-    res = "\n" + str(nrNodes) + " " + str(nrCollisions) + " "  + str(sent) + " " + str(energy)
-else:
-    res = "#nrNodes nrCollisions nrTransmissions OverallEnergy\n" + str(nrNodes) + " " + str(nrCollisions) + " "  + str(sent) + " " + str(energy)
-with open(fname, "a") as myfile:
-    myfile.write(res)
-myfile.close()
-
-# with open('nodes.txt','w') as nfile:
-#     for n in nodes:
-#         nfile.write("{} {} {}\n".format(n.x, n.y, n.nodeid))
-# with open('basestation.txt', 'w') as bfile:
-#     bfile.write("{} {} {}\n".format(bsx, bsy, 0))
+    # with open('nodes.txt','w') as nfile:
+    #     for n in nodes:
+    #         nfile.write("{} {} {}\n".format(n.x, n.y, n.nodeid))
+    # with open('basestation.txt', 'w') as bfile:
+    #     bfile.write("{} {} {}\n".format(bsx, bsy, 0))
