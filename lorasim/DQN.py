@@ -14,7 +14,7 @@ GAMMA = 0.9
 MIN_EPSILON = 0.01
 MAX_EPSILON = 1
 LAMBDA = 0.9975
-BATCH_SIZE = 32
+BATCH_SIZE = 3
 
 tf.compat.v1.disable_eager_execution()
 class Model:
@@ -33,19 +33,19 @@ class Model:
         self._define_model()
 
     def _define_model(self):
-        self._states = tf.compat.v1.placeholder(shape=[None, self._num_states], dtype=tf.float32)
-        self._q_s_a = tf.compat.v1.placeholder(shape=[None, self._num_actions], dtype=tf.float32)
+        self._states = tf.compat.v1.placeholder(shape=[nrNodes, int(self._num_states/nrNodes)], dtype=tf.float32)
+        self._q_s_a = tf.compat.v1.placeholder(shape=[ nrNodes, int(self._num_actions/nrNodes)], dtype=tf.float32)
         # create a couple of fully connected hidden layers
         fc1 = tf.compat.v1.layers.dense(self._states, 50, activation=tf.nn.relu)
         fc2 = tf.compat.v1.layers.dense(fc1, 50, activation=tf.nn.relu)
-        self._logits = tf.compat.v1.layers.dense(fc2, self._num_actions)
+        self._logits = tf.compat.v1.layers.dense(fc2, self._num_actions/nrNodes)
         loss = tf.compat.v1.losses.mean_squared_error(self._q_s_a, self._logits)
         self._optimizer = tf.compat.v1.train.AdamOptimizer().minimize(loss)
         self._var_init = tf.compat.v1.global_variables_initializer()
 
     def predict_one(self, state, sess):
         return sess.run(self._logits, feed_dict={self._states:
-                                                     state.reshape(1, self._num_states)})
+                                                     state.reshape(nrNodes,int(self._num_states/nrNodes))})
 
     def predict_batch(self, states, sess):
         return sess.run(self._logits, feed_dict={self._states: states})
@@ -96,7 +96,9 @@ class GameRunner:
             next_state, reward, done = self._env.simulate(action)
             reward = reward *-1
             self._memory.add_sample((state, action, reward, next_state))
-            self._replay()
+
+            if len(self._memory._samples) >=BATCH_SIZE :
+                self._replay()
 
             # exponentially decay the eps value
             self._steps += 1
@@ -117,9 +119,9 @@ class GameRunner:
 
     def _choose_action(self, state):
         if random.random() < self._eps:
-            return random.randint(0, self._model._num_actions - 1)
+            return np.random.uniform(low=0,high=1 ,size=(self._model._num_actions,))
         else:
-            return np.argmax(self._model.predict_one(state, self._sess))
+            return np.argmax(self._model.predict_one(np.array(state), self._sess))
 
     def _replay(self):
         batch = self._memory.sample(self._model._batch_size)
@@ -158,12 +160,12 @@ if __name__ == "__main__":
 
     model = Model(num_states, num_actions, BATCH_SIZE)
     mem = Memory(50000)
-
+    loraDir.setupNodes()
     with tf.compat.v1.Session() as sess:
         sess.run(model._var_init)
         gr = GameRunner(sess, model, env, mem, MAX_EPSILON, MIN_EPSILON,
                         LAMBDA)
-        num_episodes = 300
+        num_episodes = 10
         cnt = 0
         while cnt < num_episodes:
             if cnt % 10 == 0:

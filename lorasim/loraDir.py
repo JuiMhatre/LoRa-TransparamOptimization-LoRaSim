@@ -445,7 +445,7 @@ def transmit(env,node):
 
 def setupNodes():
     global nodes
-
+    nodes =[]
     for i in range(0, nrNodes):
         # myNode takes period (in ms), base station id packetlen (in Bytes)
         # 1000000 = 16 min
@@ -455,7 +455,6 @@ def setupNodes():
 # "main" program
 #
 def getstate():
-    setupNodes()
     nodeinfo = [[node.x, node.y,node.packet.pl] for node in nodes]
     return nodeinfo
 # get arguments
